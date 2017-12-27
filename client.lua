@@ -1,6 +1,8 @@
 local sfw = getScreenFromWorldPosition;
 local rockets = {};
 local camEnabled = false;
+local targetable = "player";
+local targetSeekDist = 250;
 
 function Rocket(x, y, z, force, target, lifespan, creator)
 	local self = {};
@@ -15,21 +17,26 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	self.lifespan = lifespan or 15000;
 	self.groundCheckDist = 0.05;
 	local targetHit = false;
+	self.obj = Object(3003, self.pos);
+	self.obj.mass = 10;
+	self.obj:setCollisionsEnabled(false);
 	self.marker = Marker(self.pos, "corona", 0.5, 255,0,0);
 	self.light = Light(0, self.pos);
 
 	function self.update(dt)
-		self.vel.z = self.vel.z - 0.005
-
 		if (type(self.target) == "userdata") then
 			self.vel = self.vel * 0.99;
 		end
-		
+
 		self.pos = self.pos + self.vel --* dt/33;
 
 		local gp = getGroundPosition(self.pos.x, self.pos.y, self.pos.z) + self.groundCheckDist;
-		if (self.pos.z < gp) then
+		if (self.pos.z <= gp) then
+			self.vel.x = self.vel.x * 0.98;
+			self.vel.y = self.vel.y * 0.98;
 			self.pos.z = gp;
+		else
+			self.vel.z = self.vel.z - 0.01
 		end
 	end
 
@@ -41,6 +48,17 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 
 		self.marker.position = self.pos;
 		self.light.position = self.pos;
+		self.obj.velocity = self.vel;
+		self.obj.position = Vector3(self.pos.x, self.pos.y, self.pos.z);
+
+		local x,y = sfw(self.pos);
+		if (x) then
+			local t = isElement(self.target) and self.target.name or "☺";
+			if (t) then
+				local d = getDistanceBetweenPoints3D(self.pos, Camera.matrix.position);
+				dxDrawText(t.." dc: "..self.deflectCount, x, y, x, y, tocolor(255,255,255), 35/d);
+			end
+		end
 	end
 
 	function self.expired(ls)
@@ -98,7 +116,7 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	function self.colliding(target)
 		local targetPos = self.pos + self.vel * 1.5;
 		local hit, x, y, z, elem, mx, my, mz = processLineOfSight(self.pos, targetPos, _, false, _, _, _, _, _, _, self.obj);
-		
+		--dxDrawLine3D(self.pos, targetPos, tocolor(255,0,0), 4);
 		if (elem and elem == self.target) then
 			fxAddBlood( x, y, z, self.vel, 3, 1 );
 			targetHit = true;
@@ -159,6 +177,7 @@ addEventHandler("onClientPreRender", root, function(dt)
 			if (i == #rockets and camEnabled) then
 				resetCamera();
 			end
+			--m.destroy();
 			m.explode();
 		else
 			if (type(m.target) == "userdata") then
@@ -177,7 +196,28 @@ addEventHandler("onClientPreRender", root, function(dt)
 			Camera.setMatrix(m.pos, m.pos+m.vel, 0, 120);
 		end
 	end
+
+	localPlayer:setData("rocket_target", false);
+	if (getControlState("aim_weapon")) then
+		findTargetOnScreen(targetable);
+	end
 end);
+
+function findTargetOnScreen(targetType)
+	local plrs = getElementsByType(targetType, root, true);
+	for i=1, #plrs do
+		if (plrs[i].onScreen and plrs[i] ~= localPlayer) then
+			local aimStart = Vector2(sfw(plrs[i].position));
+			local aimEnd = Vector2(sfw(getPedTargetEnd(localPlayer)));
+			local d = (aimStart-aimEnd).length;
+			if (d < targetSeekDist) then
+				localPlayer:setData("rocket_target", plrs[i]);
+				dxDrawLine(aimStart,aimEnd);
+				break;
+			end
+		end
+	end
+end
 
 addCommandHandler("cam", function()
 	camEnabled = not camEnabled;
@@ -186,7 +226,7 @@ addCommandHandler("cam", function()
 	else
 		localPlayer.frozen = true;
 	end
-end);
+end)
 
 function resetCamera()
 	localPlayer.frozen = false;
