@@ -28,12 +28,12 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 			self.vel = self.vel * 0.99;
 		end
 
-		self.pos = self.pos + self.vel --* dt/33;
-
 		local gp = getGroundPosition(self.pos.x, self.pos.y, self.pos.z) + self.groundCheckDist;
 		if (self.pos.z < gp) then
 			self.pos.z = gp;
 		end
+
+		self.pos = self.pos + self.vel --* dt/33;
 	end
 
 	function self.show()
