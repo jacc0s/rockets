@@ -1,8 +1,6 @@
 local sfw = getScreenFromWorldPosition;
 local rockets = {};
 local camEnabled = false;
-local targetable = "player";
-local targetSeekDist = 250;
 
 function Rocket(x, y, z, force, target, lifespan, creator)
 	local self = {};
