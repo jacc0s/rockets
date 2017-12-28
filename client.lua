@@ -1,12 +1,13 @@
-local sfw = getScreenFromWorldPosition;
+loadstring(exports.utils:load('require'))();
+require 'general';
+
 local rockets = {};
 local camEnabled = false;
-local targetable = "player";
+local targetable = "vehicle";
 local targetSeekDist = 250;
 
 function Rocket(x, y, z, force, target, lifespan, creator)
 	local self = {};
-	table.insert(rockets, self);
 	self.index = nil;
 	self.pos = Vector3(x, y, z);
 	self.vel = force or Vector3();
@@ -14,49 +15,74 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	self.creator = creator;
 	self.isDead = false;
 	local life = getTickCount();
-	self.lifespan = lifespan or 15000;
-	self.groundCheckDist = 0.05;
+	self.lifespan = lifespan or 10000;
+	self.groundCheckDist = 0.06;
 	local targetHit = false;
-	self.obj = Object(3003, self.pos);
-	self.obj.mass = 10;
-	self.obj:setCollisionsEnabled(false);
-	self.marker = Marker(self.pos, "corona", 0.5, 255,0,0);
-	self.light = Light(0, self.pos);
+	self.fall = true;
+	self.gravity = 0.008;
+
+	local deflected = getTickCount();
+	self.deflectCount = 0;
+	self.maxDeflections = 1000;
+	self.deflectMinDelay = 200;
+
+	local trail = {};
+	local trailUpdated = getTickCount();
+	self.trailColor = {math.random(255), math.random(255), math.random(255)};
+	self.trailUpdateRate = 0;
+	self.trailLength = 120;
+	self.trailThickness = 5;
+
+	self.marker = Marker(self.pos, "corona", 0.5, unpack(self.trailColor), 100);
+	self.light = Light(0, self.pos, 5, _,_,_, _,_,_, true);
+
+	--self.obj = Object(3003, self.pos);
+	--self.obj.mass = 10;
+	--self.obj:setCollisionsEnabled(false);
 
 	function self.update(dt)
 		if (type(self.target) == "userdata") then
 			self.vel = self.vel * 0.99;
 		end
 
-		self.pos = self.pos + self.vel --* dt/33;
+		self.pos = self.pos + self.vel * (dt/25);
 
 		local gp = getGroundPosition(self.pos.x, self.pos.y, self.pos.z) + self.groundCheckDist;
 		if (self.pos.z <= gp) then
 			self.vel.x = self.vel.x * 0.98;
 			self.vel.y = self.vel.y * 0.98;
+			self.vel.z = 0;
 			self.pos.z = gp;
 		else
-			self.vel.z = self.vel.z - 0.01
+			if (not self.target) then
+				if (self.fall) then
+					self.addVel(0, 0, -self.gravity);
+				end
+			end
 		end
+	end
+
+	function self.addVel(x, y, z)
+		self.vel = self.vel + Vector3(x, y, z);
 	end
 
 	function self.show()
 		local vel = (-self.vel);
-		dxDrawLine3D(self.pos, self.pos+self.vel, tocolor(255,0,0), 4);
+		dxDrawLine3D(self.pos, self.pos+self.vel, tocolor(255,0,0), 5);
 		Effect.addBulletImpact(self.pos, vel*5, 6, 0, .5);
 		Effect.addSparks(self.pos, vel, 30, 10, 0,0,0, true, .05, .2);
 
 		self.marker.position = self.pos;
 		self.light.position = self.pos;
-		self.obj.velocity = self.vel;
-		self.obj.position = Vector3(self.pos.x, self.pos.y, self.pos.z);
+		--self.obj.velocity = self.vel;
+		--self.obj.position = Vector3(self.pos.x, self.pos.y, self.pos.z);
 
 		local x,y = sfw(self.pos);
 		if (x) then
-			local t = isElement(self.target) and self.target.name or "☺";
+			local t = isElement(self.target) and self.target.name;
 			if (t) then
 				local d = getDistanceBetweenPoints3D(self.pos, Camera.matrix.position);
-				dxDrawText(t.." dc: "..self.deflectCount, x, y, x, y, tocolor(255,255,255), 35/d);
+				dxDrawText(t, x, y, x, y, tocolor(255,255,255), 35/d);
 			end
 		end
 	end
@@ -66,11 +92,9 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	end
 
 	function self.destroy()
-		for k,v in pairs(self) do
-			if (isElement(v) and v ~= self.target) then
-				v:destroy();
-			end
-		end
+		--self.obj:destroy();
+		self.light:destroy();
+		self.marker:destroy();
 		table.remove(rockets, self.index);
 	end
 
@@ -78,11 +102,6 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 		createExplosion(self.pos, 12);
 		self.destroy();
 	end
-
-	local deflected = getTickCount();
-	self.deflectCount = 0;
-	self.maxDeflections = 1000;
-	self.deflectMinDelay = 200;
 
 	function self.deflect()
 		local col = self.colliding();
@@ -99,14 +118,14 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 			end
 			deflected = getTickCount();
 
-			self.vel.x = self.vel.x * 0.95;
-			self.vel.y = self.vel.y * 0.95;
+			self.vel.x = self.vel.x * 0.65;
+			self.vel.y = self.vel.y * 0.65;
 
 
 			if (self.deflectCount > 0) then
 				self.vel.z = self.vel.z * 0.3;
 			else
-				self.vel.z = self.vel.z * 0.72;
+				self.vel.z = self.vel.z * 0.62;
 			end
 
 			self.vel:deflect(col.normal);
@@ -115,22 +134,48 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 
 	function self.colliding(target)
 		local targetPos = self.pos + self.vel * 1.5;
-		local hit, x, y, z, elem, mx, my, mz = processLineOfSight(self.pos, targetPos, _, false, _, _, _, _, _, _, self.obj);
-		--dxDrawLine3D(self.pos, targetPos, tocolor(255,0,0), 4);
-		if (elem and elem == self.target) then
-			fxAddBlood( x, y, z, self.vel, 3, 1 );
-			targetHit = true;
+		local hit = process(self.pos, targetPos, {
+			vehicles = true,
+			ignoredElement = self.obj,
+			includeWorldModelInfo= true
+		});
+
+		if (hit and hit.element) then
+			if (hit.element == self.target) then
+				targetHit = true;
+			end
+			self.onhit(hit.element, hit.piece);
 		end
 
 		return hit and {
-			pos = Vector3(x, y, z),
-			elem = elem,
-			normal = Vector3(mx, my, mz)
+			pos = hit.pos,
+			elem = hit.element,
+			normal = hit.normal
 		}
 	end
 
+	function self.onhit(elem, piece)
+		if (elem.type == "player") then
+			fxAddBlood(x, y, z, self.vel, 3, 1 );
+			playSFX3D("genrl", 20, 9, self.pos, false);
+			playSFX3D("pain_a", 0, math.random(25,33), self.pos, false);
+			elem.health = elem.health - 6;
+			local p = elem.position;
+			p.z = p.z + 0.02;
+			elem.position = p;
+			elem.velocity = elem.velocity + self.vel * 1.5;
+			if (math.random(3) == 1) then
+   			setPedAnimation(elem, "ped", "floor_hit", 1000, false, true, false);
+			end
+			if (piece == 9) then
+				setPedHeadless(elem, true);
+				setTimer(function(elem) setPedHeadless(elem, false); end, 9000, 1, elem);
+			end
+		end
+	end
+
 	function self.follow()
-		local target = isElement(self.target) and self.target.position or false;
+		local target = isElement(self.target) and self.target.position or nil;
 		if (type(target) == "userdata") then
 			local force = (target - self.pos):getNormalized();
 			self.vel = self.vel + force * 0.02;
@@ -140,13 +185,6 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 			end
 		end
 	end
-
-	local trail = {};
-	local trailUpdated = getTickCount();
-	self.trailColor = {math.random(255), math.random(255), math.random(255)};
-	self.trailUpdateRate = 10;
-	self.trailLength = 20;
-	self.trailThickness = 4;
 
 	function self.trail()
 		if (#trail == self.trailLength) then
@@ -159,51 +197,60 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 		end
 
 		for i=#trail, 1, -1  do
-			local color = tocolor(self.trailColor[1], self.trailColor[2], self.trailColor[3], i*9);
+			local alpha = (255 / #trail) * i;
+			local color = tocolor(self.trailColor[1], self.trailColor[2], self.trailColor[3], alpha);
 			if (trail[i+1]) then
 				dxDrawLine3D(trail[i], trail[i+1], color, self.trailThickness);
 			end
 		end
 	end
 
+	table.insert(rockets, self);
 	return self;
 end
 
 addEventHandler("onClientPreRender", root, function(dt)
 	for i=#rockets, 1, -1 do
-		local m = rockets[i];
-		m.index = i;
-		if (m.expired() or m.isDead) then
+		local r = rockets[i];
+		r.index = i;
+		if (type(r.target) == "userdata") then
+			r.follow();
+		end
+		r.deflect();
+		r.update(dt);
+		r.show();
+		r.trail();
+
+		if (r.expired() or r.isDead) then
 			if (i == #rockets and camEnabled) then
-				resetCamera();
+				if (#rockets == 1) then
+					resetCamera();
+				end
 			end
-			--m.destroy();
-			m.explode();
-		else
-			if (type(m.target) == "userdata") then
-				m.follow();
-			end
-			m.deflect();
-			m.update(dt);
-			m.show();
-			m.trail();
+			r.destroy();
+			--r.explode();
+		--[[	if (r.expired()) then
+				r.explode();
+			end]]
 		end
 	end
 
 	if (camEnabled) then
-		local m = rockets[#rockets];
-		if (m) then
-			Camera.setMatrix(m.pos, m.pos+m.vel, 0, 120);
+		local r = rockets[#rockets];
+		if (r and r.creator == localPlayer) then
+			Camera.setMatrix(r.pos, r.pos+r.vel, 0, 100);
 		end
 	end
 
 	localPlayer:setData("rocket_target", false);
 	if (getControlState("aim_weapon")) then
-		findTargetOnScreen(targetable);
+		getTargetOnScreen(targetable);
 	end
+
+	dxDrawText("Rockets: "..#rockets,0,0);
 end);
 
-function findTargetOnScreen(targetType)
+function getTargetOnScreen(targetType)
 	local plrs = getElementsByType(targetType, root, true);
 	for i=1, #plrs do
 		if (plrs[i].onScreen and plrs[i] ~= localPlayer) then
@@ -222,7 +269,7 @@ end
 addCommandHandler("cam", function()
 	camEnabled = not camEnabled;
 	if (not camEnabled) then
-		resetCamera()
+		resetCamera();
 	else
 		localPlayer.frozen = true;
 	end
