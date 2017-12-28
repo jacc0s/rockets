@@ -29,12 +29,12 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	local trail = {};
 	local trailUpdated = getTickCount();
 	self.trailColor = {math.random(255), math.random(255), math.random(255)};
-	self.trailUpdateRate = 0;
+	self.trailUpdateRate = 10;
 	self.trailLength = 120;
 	self.trailThickness = 5;
 
-	self.marker = Marker(self.pos, "corona", 0.5, unpack(self.trailColor), 100);
-	self.light = Light(0, self.pos, 5, _,_,_, _,_,_, true);
+	self.marker = Marker(self.pos, "corona", 0.5, self.trailColor[1], 100, 255);
+	self.light = Light(0, self.pos, 5, self.trailColor[1], 100, 255, _,_,_, true);
 
 	--self.obj = Object(3003, self.pos);
 	--self.obj.mass = 10;
@@ -158,13 +158,16 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 		if (elem.type == "player") then
 			fxAddBlood(x, y, z, self.vel, 3, 1 );
 			playSFX3D("genrl", 20, 9, self.pos, false);
-			playSFX3D("pain_a", 0, math.random(25,33), self.pos, false);
-			elem.health = elem.health - 6;
-			local p = elem.position;
-			p.z = p.z + 0.02;
-			elem.position = p;
-			elem.velocity = elem.velocity + self.vel * 1.5;
-			if (math.random(3) == 1) then
+			playSFX3D("pain_a", 0, math.random(25,33), elem.position, false);
+			elem.health = elem.health - 4;
+			setPedLookAt(elem, self.pos);
+			if (math.random(4) == 1) then
+				local p = elem.position;
+				p.z = p.z + 0.015;
+				elem.position = p;
+				elem.velocity = elem.velocity + self.vel * 1.5;
+			end
+			if (math.random(4) == 1) then
    			setPedAnimation(elem, "ped", "floor_hit", 1000, false, true, false);
 			end
 			if (piece == 9) then
@@ -175,6 +178,7 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 	end
 
 	function self.follow()
+		self.target = isElement(self.target) and self.target or nil;
 		local target = isElement(self.target) and self.target.position or nil;
 		if (type(target) == "userdata") then
 			local force = (target - self.pos):getNormalized();
@@ -213,9 +217,7 @@ addEventHandler("onClientPreRender", root, function(dt)
 	for i=#rockets, 1, -1 do
 		local r = rockets[i];
 		r.index = i;
-		if (type(r.target) == "userdata") then
-			r.follow();
-		end
+		r.follow();
 		r.deflect();
 		r.update(dt);
 		r.show();
@@ -228,10 +230,6 @@ addEventHandler("onClientPreRender", root, function(dt)
 				end
 			end
 			r.destroy();
-			--r.explode();
-		--[[	if (r.expired()) then
-				r.explode();
-			end]]
 		end
 	end
 
