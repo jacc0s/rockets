@@ -3,7 +3,7 @@ require 'general';
 
 local rockets = {};
 local camEnabled = false;
-local targetable = "vehicle";
+local targetable = "player";
 local targetSeekDist = 250;
 
 function Rocket(x, y, z, force, target, lifespan, creator)
@@ -23,13 +23,13 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 
 	local deflected = getTickCount();
 	self.deflectCount = 0;
-	self.maxDeflections = 1000;
+	self.maxDeflections = 4;
 	self.deflectMinDelay = 200;
 
 	local trail = {};
 	local trailUpdated = getTickCount();
 	self.trailColor = {math.random(255), math.random(255), math.random(255)};
-	self.trailUpdateRate = 10;
+	self.trailUpdateRate = 50;
 	self.trailLength = 120;
 	self.trailThickness = 5;
 
@@ -74,8 +74,8 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 
 		self.marker.position = self.pos;
 		self.light.position = self.pos;
+		--self.obj.position = self.pos;
 		--self.obj.velocity = self.vel;
-		--self.obj.position = Vector3(self.pos.x, self.pos.y, self.pos.z);
 
 		local x,y = sfw(self.pos);
 		if (x) then
@@ -128,7 +128,7 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 				self.vel.z = self.vel.z * 0.62;
 			end
 
-			self.vel:deflect(col.normal);
+			self.vel = self.vel - (col.normal * self.vel:dot(col.normal) * 2);
 		end
 	end
 
@@ -147,16 +147,12 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 			self.onhit(hit.element, hit.piece);
 		end
 
-		return hit and {
-			pos = hit.pos,
-			elem = hit.element,
-			normal = hit.normal
-		}
+		return hit;
 	end
 
 	function self.onhit(elem, piece)
 		if (elem.type == "player") then
-			fxAddBlood(x, y, z, self.vel, 3, 1 );
+			fxAddBlood(self.pos, self.vel, 3, 1 );
 			playSFX3D("genrl", 20, 9, self.pos, false);
 			playSFX3D("pain_a", 0, math.random(25,33), elem.position, false);
 			elem.health = elem.health - 4;
@@ -167,9 +163,9 @@ function Rocket(x, y, z, force, target, lifespan, creator)
 				elem.position = p;
 				elem.velocity = elem.velocity + self.vel * 1.5;
 			end
-			if (math.random(4) == 1) then
+			--[[if (math.random(4) == 1) then
    			setPedAnimation(elem, "ped", "floor_hit", 1000, false, true, false);
-			end
+			end]]
 			if (piece == 9) then
 				setPedHeadless(elem, true);
 				setTimer(function(elem) setPedHeadless(elem, false); end, 9000, 1, elem);
@@ -276,12 +272,4 @@ end)
 function resetCamera()
 	localPlayer.frozen = false;
 	setCameraTarget(localPlayer);
-end
-
-function Vector3:deflect(normal)
-	local dir = normal * self:dot(normal) * 2;
-	self.x = self.x - dir.x;
-	self.y = self.y - dir.y;
-	self.z = self.z - dir.z;
-	return self;
 end
